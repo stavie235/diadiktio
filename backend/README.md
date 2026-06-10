@@ -8,13 +8,13 @@ User-based collaborative filtering recommender service built with FastAPI + vani
 
 ```bash
 # 1. Install dependencies
-pip install -r requirements.txt
+py -3.12 -m pip install -r requirements.txt
 
 # 2. Populate the database (downloads ~1 MB zip, creates movielens.db)
-python3 init_db.py
+py -3.12 init_db.py
 
 # 3. Start the server
-python3 main.py
+py -3.12  main.py
 ```
 
 The API is now live at **http://localhost:3000**.
