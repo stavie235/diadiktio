@@ -49,7 +49,7 @@
     <div class="table-wrap">
       <table id="tbl-search" style="display:none">
         <thead>
-          <tr><th>ID</th><th>Title</th><th>Genres</th><th>Actions</th></tr>
+          <tr><th>ID</th><th>Title</th><th>Genres</th></tr>
         </thead>
         <tbody id="tbody-search"></tbody>
       </table>
@@ -64,9 +64,12 @@
       They are sent to the recommendation engine when you request recommendations.
     </p>
     <div class="row">
-      <label for="rate-id">Movie ID</label>
-      <input type="number" id="rate-id" placeholder="e.g. 2571" min="1" />
+      <label for="rate-search">Movie</label>
+      <input type="text" id="rate-search" placeholder="Search movie title…" />
+      <button id="btn-rate-find">Find</button>
     </div>
+    <div id="rate-results" class="inline-results"></div>
+    <div id="rate-selected" class="selected-badge" style="display:none"></div>
     <div class="row">
       <label for="rate-val">Rating</label>
       <input type="number" id="rate-val" placeholder="0.5 – 5.0" min="0.5" max="5.0" step="0.5" />
@@ -83,8 +86,13 @@
       Fetches all stored ratings for a movie and computes the average.
     </p>
     <div class="row">
-      <label for="avg-id">Movie ID</label>
-      <input type="number" id="avg-id" placeholder="e.g. 2571" min="1" />
+      <label for="avg-search">Movie</label>
+      <input type="text" id="avg-search" placeholder="Search movie title…" />
+      <button id="btn-avg-find">Find</button>
+    </div>
+    <div id="avg-results" class="inline-results"></div>
+    <div id="avg-selected" class="selected-badge" style="display:none"></div>
+    <div class="row">
       <button id="btn-avg">Show Average</button>
     </div>
     <div class="msg" id="msg-avg"></div>

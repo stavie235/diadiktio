@@ -1,39 +1,33 @@
 // ── Config ────────────────────────────────────────────────────────────────
-// mono ayto allazeis an trekseis ton server se allo port i machine
 const BASE_URL = "http://localhost:3000/movielens/api";
 
 // ── Session state ─────────────────────────────────────────────────────────
-// aplo JS object sti mnimi — oxi localStorage — opote xanetai me refresh
-// keys = movieId, values = rating
+// {movieId: {rating, title}} — in-memory only, lost on refresh
 const sessionRatings = {};
+
+// Currently selected movies for the Rate and Average sections
+let rateMovie = null; // {movieId, title}
+let avgMovie  = null;
 
 
 // ── Utility helpers ────────────────────────────────────────────────────────
 
-/** deixnei minima sto UI. type: "ok" | "err" | "info" */
 function setMsg(id, text, type = "info") {
   const el = document.getElementById(id);
   el.textContent = text;
   el.className = `msg ${type}`;
 }
 
-/**
- * trabaei to error message apo to response tou backend.
- * to diko mas backend stelnei panta {"status":"error","message":"..."}
- * to data.detail einai fallback gia unexpected FastAPI errors
- */
 function apiErr(data) {
   return data.message ?? (typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail)) ?? "Unknown error";
 }
 
-/** svisimei to minima */
 function clearMsg(id) {
   const el = document.getElementById(id);
   el.textContent = "";
   el.className = "msg";
 }
 
-/** ksanadeixnei ti lista me ta session ratings katw apo ti forma */
 function renderSessionList() {
   const el = document.getElementById("session-list");
   const entries = Object.entries(sessionRatings);
@@ -42,8 +36,93 @@ function renderSessionList() {
     return;
   }
   el.textContent = "Session ratings: "
-    + entries.map(([id, r]) => `Movie ${id} → ${r}`).join(" · ");
+    + entries.map(([, { rating, title }]) => `${title} → ${rating}`).join(" · ");
 }
+
+function escHtml(str) {
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+
+// ── Inline movie search widget ─────────────────────────────────────────────
+// Shared by the Rate and Average sections so the user picks a movie by title;
+// the movieId is captured internally and never typed manually.
+
+function makeMovieSearch({ searchId, btnId, resultsId, selectedId, onSelect }) {
+  const searchInput = document.getElementById(searchId);
+  const resultsEl   = document.getElementById(resultsId);
+  const selectedEl  = document.getElementById(selectedId);
+
+  async function doSearch() {
+    const kw = searchInput.value.trim();
+    resultsEl.innerHTML = "";
+    resultsEl.style.display = "none";
+
+    if (!kw) return;
+
+    try {
+      const res    = await fetch(`${BASE_URL}/movies?search=${encodeURIComponent(kw)}`);
+      const data   = await res.json();
+      const movies = data.movies ?? [];
+
+      if (movies.length === 0) {
+        const div = document.createElement("div");
+        div.className = "result-item result-empty";
+        div.textContent = "No movies found.";
+        resultsEl.appendChild(div);
+        resultsEl.style.display = "block";
+        return;
+      }
+
+      movies.slice(0, 8).forEach((m) => {
+        const div = document.createElement("div");
+        div.className = "result-item";
+        div.textContent = `${m.title}  —  ${m.genres}`;
+        div.addEventListener("click", () => {
+          searchInput.value = m.title;
+          selectedEl.textContent = `Selected: ${m.title}`;
+          selectedEl.style.display = "block";
+          resultsEl.style.display = "none";
+          onSelect({ movieId: m.movieId, title: m.title });
+        });
+        resultsEl.appendChild(div);
+      });
+
+      resultsEl.style.display = "block";
+    } catch (err) {
+      // Network failure — user can retry
+    }
+  }
+
+  document.getElementById(btnId).addEventListener("click", doSearch);
+  searchInput.addEventListener("keydown", (e) => { if (e.key === "Enter") doSearch(); });
+
+  // Clear selection whenever the user edits the search field
+  searchInput.addEventListener("input", () => {
+    onSelect(null);
+    selectedEl.style.display = "none";
+  });
+}
+
+makeMovieSearch({
+  searchId:  "rate-search",
+  btnId:     "btn-rate-find",
+  resultsId: "rate-results",
+  selectedId: "rate-selected",
+  onSelect:  (m) => { rateMovie = m; },
+});
+
+makeMovieSearch({
+  searchId:  "avg-search",
+  btnId:     "btn-avg-find",
+  resultsId: "avg-results",
+  selectedId: "avg-selected",
+  onSelect:  (m) => { avgMovie = m; },
+});
 
 
 // ── Section 1: Add a movie ─────────────────────────────────────────────────
@@ -75,7 +154,6 @@ document.getElementById("btn-add").addEventListener("click", async () => {
     document.getElementById("add-title").value  = "";
     document.getElementById("add-genres").value = "";
   } catch (err) {
-    // network failure i JSON parse error
     setMsg("msg-add", `Network error: ${err.message}`, "err");
   }
 });
@@ -84,7 +162,6 @@ document.getElementById("btn-add").addEventListener("click", async () => {
 // ── Section 2: Search movies ───────────────────────────────────────────────
 
 document.getElementById("btn-search").addEventListener("click", searchMovies);
-// Enter sto search box kanei to idio me to click
 document.getElementById("search-kw").addEventListener("keydown", (e) => {
   if (e.key === "Enter") searchMovies();
 });
@@ -119,25 +196,11 @@ async function searchMovies() {
       tr.innerHTML = `
         <td>${m.movieId}</td>
         <td>${escHtml(m.title)}</td>
-        <td>${escHtml(m.genres)}</td>
-        <td>
-          <button class="btn-use-id" data-id="${m.movieId}" style="font-size:.8rem;padding:.25rem .7rem">
-            Use ID
-          </button>
-        </td>`;
+        <td>${escHtml(m.genres)}</td>`;
       tbody.appendChild(tr);
     });
 
     table.style.display = "table";
-
-    // to "Use ID" button gemizei automata ta pedia Movie ID sto rate kai average section
-    tbody.querySelectorAll(".btn-use-id").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const id = btn.dataset.id;
-        document.getElementById("rate-id").value = id;
-        document.getElementById("avg-id").value  = id;
-      });
-    });
 
   } catch (err) {
     setMsg("msg-search", `Network error: ${err.message}`, "err");
@@ -147,36 +210,24 @@ async function searchMovies() {
 
 // ── Section 3: Rate a movie ────────────────────────────────────────────────
 
-document.getElementById("btn-rate").addEventListener("click", async () => {
-  const idVal  = document.getElementById("rate-id").value.trim();
+document.getElementById("btn-rate").addEventListener("click", () => {
   const rateVal = document.getElementById("rate-val").value.trim();
   clearMsg("msg-rate");
 
-  const movieId = parseInt(idVal, 10);
-  const rating  = parseFloat(rateVal);
-
-  if (!idVal || isNaN(movieId) || movieId < 1) {
-    setMsg("msg-rate", "Enter a valid Movie ID (positive integer).", "err");
+  if (!rateMovie) {
+    setMsg("msg-rate", "Search for and select a movie first.", "err");
     return;
   }
+
+  const rating = parseFloat(rateVal);
   if (!rateVal || isNaN(rating) || rating < 0.5 || rating > 5.0) {
     setMsg("msg-rate", "Rating must be between 0.5 and 5.0.", "err");
     return;
   }
 
-  try {
-    const res = await fetch(`${BASE_URL}/ratings/${movieId}`);
-    if (res.status === 404) {
-      setMsg("msg-rate", `Movie ${movieId} does not exist in the database.`, "err");
-      return;
-    }
-  } catch (err) {
-    setMsg("msg-rate", `Network error: ${err.message}`, "err");
-    return;
-  }
-
-  sessionRatings[movieId] = rating;
-  setMsg("msg-rate", `Recorded: Movie ${movieId} → ${rating}`, "ok");
+  const { movieId, title } = rateMovie;
+  sessionRatings[movieId] = { rating, title };
+  setMsg("msg-rate", `Recorded: "${title}" → ${rating}`, "ok");
   renderSessionList();
 });
 
@@ -184,21 +235,21 @@ document.getElementById("btn-rate").addEventListener("click", async () => {
 // ── Section 4: Movie average rating ───────────────────────────────────────
 
 document.getElementById("btn-avg").addEventListener("click", async () => {
-  const idVal = document.getElementById("avg-id").value.trim();
   clearMsg("msg-avg");
 
-  const movieId = parseInt(idVal, 10);
-  if (!idVal || isNaN(movieId) || movieId < 1) {
-    setMsg("msg-avg", "Enter a valid Movie ID.", "err");
+  if (!avgMovie) {
+    setMsg("msg-avg", "Search for and select a movie first.", "err");
     return;
   }
+
+  const { movieId, title } = avgMovie;
 
   try {
     const res  = await fetch(`${BASE_URL}/ratings/${movieId}`);
     const data = await res.json();
 
     if (res.status === 404) {
-      setMsg("msg-avg", `Movie ${movieId} not found.`, "err");
+      setMsg("msg-avg", `Movie "${title}" not found.`, "err");
       return;
     }
     if (!res.ok) {
@@ -208,14 +259,13 @@ document.getElementById("btn-avg").addEventListener("click", async () => {
 
     const ratings = data.ratings;
     if (ratings.length === 0) {
-      setMsg("msg-avg", "No ratings found for this movie.", "info");
+      setMsg("msg-avg", `No ratings found for "${title}".`, "info");
       return;
     }
 
-    // ypologizoume to mean client-side apo ola ta ratings pou mas estile to backend
     const sum = ratings.reduce((acc, r) => acc + r.rating, 0);
     const avg = (sum / ratings.length).toFixed(2);
-    setMsg("msg-avg", `Average rating: ${avg} (from ${ratings.length} rating(s))`, "ok");
+    setMsg("msg-avg", `Average rating for "${title}": ${avg} (from ${ratings.length} rating(s))`, "ok");
 
   } catch (err) {
     setMsg("msg-avg", `Network error: ${err.message}`, "err");
@@ -236,9 +286,9 @@ document.getElementById("btn-recs").addEventListener("click", async () => {
     return;
   }
 
-  // Convert the sessionRatings object into the array shape the API expects.
+  // All ratings accumulated during the session are sent together.
   const payload = {
-    ratings: entries.map(([id, r]) => ({ movieId: Number(id), rating: r })),
+    ratings: entries.map(([id, { rating }]) => ({ movieId: Number(id), rating })),
   };
 
   try {
@@ -287,19 +337,5 @@ document.getElementById("btn-recs").addEventListener("click", async () => {
 });
 
 
-// ── XSS guard ─────────────────────────────────────────────────────────────
-// escape HTML chars prin ta bazoume sto innerHTML — xwris ayto an kapoios
-// prosthesoi tainía me titlo "<script>alert(1)</script>" tha trexei sto browser
-// which is... not great bestie
-function escHtml(str) {
-  return String(str)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
-
-
 // ── init ──────────────────────────────────────────────────────────────────
-// trexei mia fora sto load gia na deixnei "No ratings yet" apo tin arxi
 renderSessionList();

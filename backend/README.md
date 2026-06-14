@@ -8,19 +8,29 @@ User-based collaborative filtering recommender service built with FastAPI + vani
 
 ```bash
 # 1. Install dependencies
-py -3.12 -m pip install -r requirements.txt
+python3 -m pip install -r requirements.txt
 
-# 2. Populate the database (downloads ~1 MB zip, creates movielens.db)
-py -3.12 init_db.py
+# 2. Populate the database (creates movielens.db from the bundled zip)
+python3 init_db.py
 
-# 3. Start the server
-py -3.12  main.py
+# 3. Start the backend server
+python3 main.py
 ```
 
 The API is now live at **http://localhost:3000**.
 Interactive docs (Swagger UI): **http://localhost:3000/docs**
 
-To open the frontend, open `frontend/index.html` in any browser (no build step needed).
+**In a second terminal**, serve the frontend:
+
+```bash
+cd ../frontend
+python3 -m http.server 8081
+```
+
+Then open **http://localhost:8081** in your browser.
+
+> Do not open `index.html` directly as a `file://` URL — browsers block `fetch` requests from file URLs to localhost. Always serve it through the HTTP server above.
+> Port 8080 is reserved by VS Code; use 8081 (or any other free port).
 
 ---
 
