@@ -1,16 +1,16 @@
-// ── Configuration ─────────────────────────────────────────────────────────
-// BASE_URL is the ONLY thing you change when deploying to a different server.
+// ── Config ────────────────────────────────────────────────────────────────
+// mono ayto allazeis an trekseis ton server se allo port i machine
 const BASE_URL = "http://localhost:3000/movielens/api";
 
 // ── Session state ─────────────────────────────────────────────────────────
-// Plain JS object — NOT localStorage — so ratings disappear on page refresh.
-// Keys are movieId (number), values are rating (number).
+// aplo JS object sti mnimi — oxi localStorage — opote xanetai me refresh
+// keys = movieId, values = rating
 const sessionRatings = {};
 
 
 // ── Utility helpers ────────────────────────────────────────────────────────
 
-/** Show a message in a .msg element.  type is "ok" | "err" | "info". */
+/** deixnei minima sto UI. type: "ok" | "err" | "info" */
 function setMsg(id, text, type = "info") {
   const el = document.getElementById(id);
   el.textContent = text;
@@ -18,23 +18,22 @@ function setMsg(id, text, type = "info") {
 }
 
 /**
- * Extract an error message from an API response body.
- * After the backend fix all errors are {"status":"error","message":"..."};
- * data.detail is a fallback for unexpected FastAPI 500s that still use the
- * default {"detail": "..."} shape.
+ * trabaei to error message apo to response tou backend.
+ * to diko mas backend stelnei panta {"status":"error","message":"..."}
+ * to data.detail einai fallback gia unexpected FastAPI errors
  */
 function apiErr(data) {
   return data.message ?? (typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail)) ?? "Unknown error";
 }
 
-/** Clear a message element. */
+/** svisimei to minima */
 function clearMsg(id) {
   const el = document.getElementById(id);
   el.textContent = "";
   el.className = "msg";
 }
 
-/** Re-render the session ratings list shown below the rating form. */
+/** ksanadeixnei ti lista me ta session ratings katw apo ti forma */
 function renderSessionList() {
   const el = document.getElementById("session-list");
   const entries = Object.entries(sessionRatings);
@@ -76,7 +75,7 @@ document.getElementById("btn-add").addEventListener("click", async () => {
     document.getElementById("add-title").value  = "";
     document.getElementById("add-genres").value = "";
   } catch (err) {
-    // Network failure or JSON parse error.
+    // network failure i JSON parse error
     setMsg("msg-add", `Network error: ${err.message}`, "err");
   }
 });
@@ -85,7 +84,7 @@ document.getElementById("btn-add").addEventListener("click", async () => {
 // ── Section 2: Search movies ───────────────────────────────────────────────
 
 document.getElementById("btn-search").addEventListener("click", searchMovies);
-// Allow pressing Enter in the search box to trigger search.
+// Enter sto search box kanei to idio me to click
 document.getElementById("search-kw").addEventListener("keydown", (e) => {
   if (e.key === "Enter") searchMovies();
 });
@@ -131,7 +130,7 @@ async function searchMovies() {
 
     table.style.display = "table";
 
-    // "Use ID" fills the Movie ID fields in the Rate and Average sections.
+    // to "Use ID" button gemizei automata ta pedia Movie ID sto rate kai average section
     tbody.querySelectorAll(".btn-use-id").forEach((btn) => {
       btn.addEventListener("click", () => {
         const id = btn.dataset.id;
@@ -213,7 +212,7 @@ document.getElementById("btn-avg").addEventListener("click", async () => {
       return;
     }
 
-    // Compute average client-side from the returned ratings array.
+    // ypologizoume to mean client-side apo ola ta ratings pou mas estile to backend
     const sum = ratings.reduce((acc, r) => acc + r.rating, 0);
     const avg = (sum / ratings.length).toFixed(2);
     setMsg("msg-avg", `Average rating: ${avg} (from ${ratings.length} rating(s))`, "ok");
@@ -289,9 +288,9 @@ document.getElementById("btn-recs").addEventListener("click", async () => {
 
 
 // ── XSS guard ─────────────────────────────────────────────────────────────
-// Escape HTML special characters before injecting user-controlled strings
-// into innerHTML.  Without this a movie title containing <script> would
-// execute arbitrary code in the browser.
+// escape HTML chars prin ta bazoume sto innerHTML — xwris ayto an kapoios
+// prosthesoi tainía me titlo "<script>alert(1)</script>" tha trexei sto browser
+// which is... not great bestie
 function escHtml(str) {
   return String(str)
     .replace(/&/g, "&amp;")
@@ -301,5 +300,6 @@ function escHtml(str) {
 }
 
 
-// ── Initialise ────────────────────────────────────────────────────────────
+// ── init ──────────────────────────────────────────────────────────────────
+// trexei mia fora sto load gia na deixnei "No ratings yet" apo tin arxi
 renderSessionList();

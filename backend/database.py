@@ -1,33 +1,33 @@
 """
-database.py — SQLite connection helper and low-level query utilities.
+database.py — oti exei na kanei me ti vasi einai edo, lowkey to pio boring arxeio
 
-All other modules import `get_db()` to obtain a connection; they never call
-sqlite3.connect() directly, so the DB path is configured in exactly one place.
+ola ta alla arxeia pernane connection mesa apo get_db() opote an allaksei to path
+tis basis to allazoume mono edo kai den psaxnoume pantou, not gonna lie smart move
 """
 
 import sqlite3
 from pathlib import Path
 
-# Resolve path relative to this file so the server can be started from any CWD.
+# relative sto arxeio ayto opote den xalaei an trekseis apo allo fakelo no cap
 DB_PATH = Path(__file__).parent / "movielens.db"
 
 
 def get_db() -> sqlite3.Connection:
     """
-    Open and return a new SQLite connection with row_factory set to
-    sqlite3.Row so columns can be accessed by name (row["title"]) as well
-    as by index.  The caller is responsible for closing the connection.
+    anoigei connection sti vasi kai to epistrefei.
+    to row_factory = sqlite3.Row mas afhnei na grafoume row["title"] anti row[0]
+    which is so much better honestly. o caller kleinei to connection meta.
     """
     conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row   # enables dict-like column access
+    conn.row_factory = sqlite3.Row   # dict-like access, poly pio readable
     return conn
 
 
 def fetchall(sql: str, params: tuple = ()) -> list[sqlite3.Row]:
     """
-    Run a SELECT query and return all rows.
-    Params must be a tuple of values matching the ? placeholders in sql —
-    never build the SQL string with format() or f-strings.
+    trexei SELECT kai epistrefei oles tis grammes.
+    ta params mpainoun sta ? — POTE min kaneis f-string mesa sto SQL
+    giati SQL injection is not it bestie
     """
     conn = get_db()
     try:
@@ -37,7 +37,7 @@ def fetchall(sql: str, params: tuple = ()) -> list[sqlite3.Row]:
 
 
 def fetchone(sql: str, params: tuple = ()) -> sqlite3.Row | None:
-    """Run a SELECT query and return the first row, or None if no rows match."""
+    """SELECT alla mono i proti grammi, None an den vrike tipota"""
     conn = get_db()
     try:
         return conn.execute(sql, params).fetchone()
@@ -47,9 +47,8 @@ def fetchone(sql: str, params: tuple = ()) -> sqlite3.Row | None:
 
 def execute(sql: str, params: tuple = ()) -> int:
     """
-    Run an INSERT/UPDATE/DELETE query and return the lastrowid.
-    Commits automatically — each write is its own transaction, which is fine
-    for this assignment's low-concurrency workload.
+    gia INSERT / UPDATE / DELETE. kanei commit mono tou kai epistrefei
+    to id tis grammis pou molis egrapse (lastrowid), pretty useful
     """
     conn = get_db()
     try:

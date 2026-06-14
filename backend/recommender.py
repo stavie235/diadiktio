@@ -1,61 +1,58 @@
 """
-recommender.py — User-based collaborative filtering with Pearson similarity.
+recommender.py — user-based collaborative filtering me Pearson similarity, to heart tou app
 
-This module is intentionally isolated from FastAPI so it can be unit-tested
-independently (just call `recommend(user_ratings)`).
+einai xwristo apo to FastAPI epistrofe na to unit-testaris mono tou an theleis
+(apla kales recommend(user_ratings) kai voila)
 
-Algorithm outline
-─────────────────
-1. Load all DB ratings into memory (once per request — acceptable for 100 k rows).
-2. Find neighbour users who share at least MIN_CO_RATED movies with the active user.
-3. Compute Pearson correlation between the active user and each neighbour over
-   their shared movies.
-4. Keep the TOP_K most similar neighbours (positive similarity only).
-5. For each candidate movie (not yet rated by the active user), predict:
+pos doulevei se apla:
+1. fortwnei ola ta ratings apo ti vasi sti mnimi (100k grammes, acceptable gia ptixiako)
+2. vrisketai poioi xristes exoun vathmologisei toulaxiston MIN_CO_RATED kines tainies me ton active user
+3. ypologizei Pearson correlation metaksy tou active user kai kathe neighbor
+4. kratai tous TOP_K pio similar (mono positive similarity — negative tha antistrefe tis provlepseis)
+5. gia kathe tainía pou den exei dei o active user, provlepei rating:
 
        pred(u, i) = mean_u
                     + Σ_v [ sim(u,v) · (r_{v,i} − mean_v) ]
                       ──────────────────────────────────────
                             Σ_v |sim(u,v)|
 
-   where the sums run only over neighbours who actually rated movie i.
-6. Return the TOP_N movies by predicted rating, joined with title + genres.
+   oi summations einai mono gia neighbors pou exoun vathmologisei auti ti tainía
+6. epistrefei ta TOP_N movies me to ipsylotero predicted rating, me titlo kai genres
 """
 
 import sqlite3
 from database import get_db
 
-# ── Tuning constants ──────────────────────────────────────────────────────────
+# ── numbers pou mporeis na allakseis an theleis na kaneis tweaking ──────────
 
-# K neighbours considered: larger K → smoother predictions but slower; smaller
-# K → faster but noisier.  30 is a common sweet-spot for datasets this size.
+# posous neighbors kratame — megalytero K = pio smooth provlepseis alla pio argo
+# mikrotero K = pio grigoro alla pio "noisy". 30 einai classic sweet spot
 TOP_K = 30
 
-# N recommendations to return.  10 gives the user enough variety without
-# overwhelming the UI.
+# posa recommendations na epistrefoume ston user
 TOP_N = 10
 
-# Minimum number of movies both users must have rated together to compute a
-# meaningful Pearson correlation.  With only 1 co-rated item the formula
-# degenerates (denominator = 0 for centred ratings).
-MIN_CO_RATED = 2   # raising the threshold risks finding zero neighbors at all and always falling back to global popularity. That would make the recommender look broken.
+# postes kines tainies preepei na exoun vathmologisei dyo xristes mazi
+# gia na tous sygkrinoume me Pearson. me 1 mono tainía i formula xalaei (division by zero)
+# to kratame sto 2 giati an to auksissoume riskiroume na min vriskoume katholou neighbors
+# kai na paei panta sto fallback — which would be awkward in the exam ngl
+MIN_CO_RATED = 2
 
 
-# ── Pure maths helpers ────────────────────────────────────────────────────────
+# ── ta maths ─────────────────────────────────────────────────────────────────
 
 def _pearson(xs: list[float], ys: list[float]) -> float:
     """
-    Pearson correlation coefficient between two equal-length lists.
+    ypologizei Pearson correlation metaksy dyo liston vathmologiwn.
 
-    Formula:
+    typos:
         r = Σ(xi − x̄)(yi − ȳ)
             ───────────────────────────────────
             sqrt( Σ(xi − x̄)² · Σ(yi − ȳ)² )
 
-    Returns 0.0 for edge cases where the formula is undefined:
-    - Fewer than MIN_CO_RATED pairs (caller should already filter, but guard here).
-    - Zero variance in either list (user gave the same rating to everything →
-      denominator = 0 → correlation is undefined, treat as neutral / 0).
+    epistrefei 0.0 se edge cases:
+    - ligoteres apo MIN_CO_RATED kines tainies (o caller filtrarei prin, alla gia asfaleia)
+    - an kapoios exei dwsei to idio rating se ola (zero variance = denominator = 0 = undefined)
     """
     n = len(xs)
     if n < MIN_CO_RATED:
@@ -64,7 +61,7 @@ def _pearson(xs: list[float], ys: list[float]) -> float:
     mean_x = sum(xs) / n
     mean_y = sum(ys) / n
 
-    # Centre the ratings around each user's personal mean.
+    # afairoume to mean apo kathe rating — etsi sygkrineta "style" oxi "absolute scores"
     dx = [x - mean_x for x in xs]
     dy = [y - mean_y for y in ys]
 
@@ -72,8 +69,7 @@ def _pearson(xs: list[float], ys: list[float]) -> float:
     denom_x_sq  = sum(a * a for a in dx)
     denom_y_sq  = sum(b * b for b in dy)
 
-    # Zero variance check: if either user gave the same score to all co-rated
-    # movies, the denominator is 0 and Pearson is undefined.
+    # an kapoios exei dwsei to idio score se ola, i formula den orizetai — epistrefoume 0
     if denom_x_sq == 0 or denom_y_sq == 0:
         return 0.0
 
@@ -84,43 +80,34 @@ def _pearson(xs: list[float], ys: list[float]) -> float:
 
 def recommend(user_ratings: list[dict]) -> list[dict]:
     """
-    Generate movie recommendations for the active user.
-
-    Parameters
-    ----------
-    user_ratings : list of {"movieId": int, "rating": float}
-        Ratings submitted by the active user.  These are NOT stored in the DB.
-
-    Returns
-    -------
-    list of {"movieId": int, "title": str, "genres": str, "predictedRating": float}
-        Up to TOP_N recommendations sorted by predicted rating (descending).
-        Returns [] if no meaningful neighbours are found.
+    paragei recommendations gia ton active user.
+    pairnei lista me ta session ratings tou user, epistrefei lista me tainies + predicted ratings.
+    epistrefei kai True/False gia to an xrhsimopoihthike to fallback.
     """
 
-    # Map the active user's ratings for fast look-up.
-    # {movieId: rating}
+    # kanome dict gia na psaxnoume ratings me movieId quickly: {movieId: rating}
     user_map: dict[int, float] = {r["movieId"]: r["rating"] for r in user_ratings}
-    user_mean = sum(user_map.values()) / len(user_map)   # if the denom was zero  we see in models.py aka in RecommendationRequest that min_length=1 so is safe and FastAPI rejects empty lists with a 422 error before we even get here.
+    # den mporei na einai empty — to models.py (min_length=1) to elegxei prin ftasei edo
+    user_mean = sum(user_map.values()) / len(user_map)
 
-    # ── Step 1: load all DB ratings ──────────────────────────────────────────
+    # ── vima 1: fortwnoume ola ta ratings apo ti vasi ────────────────────────
     conn = get_db()
     rows = conn.execute("SELECT userId, movieId, rating FROM ratings").fetchall()
     conn.close()
 
-    # Build a per-user dict: {userId: {movieId: rating}}
+    # organosnoume ana user: {userId: {movieId: rating}}
     db_users: dict[int, dict[int, float]] = {}
     for row in rows:
         db_users.setdefault(row["userId"], {})[row["movieId"]] = row["rating"]
 
-    # ── Step 2 & 3: find neighbours and compute Pearson similarity ───────────
+    # ── vima 2 & 3: vriskome neighbors kai ypologizoume similarity ───────────
     similarities: list[tuple[float, int]] = []  # (sim, userId)
 
     for v_id, v_map in db_users.items():
-        # Co-rated movie IDs (intersection of the two rating sets).
+        # kines tainies pou exoun vathmologisei kai oi dyo (intersection)
         shared = [mid for mid in user_map if mid in v_map]
 
-        # Skip users with too few shared ratings — correlation would be meaningless.
+        # an exoun vathmologisei poly liges kines mazi, i Pearson den axizei
         if len(shared) < MIN_CO_RATED:
             continue
 
@@ -129,24 +116,23 @@ def recommend(user_ratings: list[dict]) -> list[dict]:
 
         sim = _pearson(xs, ys)
 
-        # Only keep positively correlated neighbours; a negative sim would
-        # invert the prediction, making things rated low by similar users look good.
+        # negative similarity simainei "antithetwn gematon" — an tous kratousame
+        # tha antistrefe tis provlepseis kai tha proeinai things they hated, not it
         if sim > 0:
             similarities.append((sim, v_id))
 
-    # ── Edge case: no neighbours found ──────────────────────────────────────
+    # ── edge case: den vrikame katholou neighbors ─────────────────────────────
     if not similarities:
-        # Optional fallback: return the globally highest-rated movies.
-        # This gives the user something useful even when their taste is unique.
-        # Clearly flagged as a fallback so the examiner knows it's intentional.
+        # fallback: epistrefoume ta globally popular movies
+        # to isFallback=True pigenei sto frontend kai deixnei different message
         return _global_fallback(user_map), True
 
-    # Sort by similarity descending; keep top K.
+    # kratame tous TOP_K pio similar neighbors
     similarities.sort(key=lambda t: t[0], reverse=True)
     top_neighbours = similarities[:TOP_K]
 
-    # ── Step 4 & 5: predict ratings for unseen candidate movies ─────────────
-    # Collect all movies rated by at least one neighbour that the user hasn't seen.
+    # ── vima 4 & 5: problepoume ratings gia tainies pou den exei dei o user ──
+    # mazi oles tis tainies pou exoun dei oi neighbors alla oxi o user
     candidate_movies: set[int] = set()
     for _, v_id in top_neighbours:
         for mid in db_users[v_id]:
@@ -162,37 +148,37 @@ def recommend(user_ratings: list[dict]) -> list[dict]:
         for sim, v_id in top_neighbours:
             v_map = db_users[v_id]
             if movie_id not in v_map:
-                # This neighbour didn't rate the candidate movie — skip them.
+                # aytos o neighbor den exei vathmologisei ayti tin tainía — skip
                 continue
 
             v_mean  = sum(v_map.values()) / len(v_map)
-            # Deviation of neighbour's rating from their own mean.
+            # provlepoume vasi tis apostasis tou neighbor rating apo to diko tou mean
             numerator += sim * (v_map[movie_id] - v_mean)
             denom     += abs(sim)
 
-        # Empty denominator: no neighbour rated this movie — skip it.
+        # den tin exei vathmologisei kaneis apo tous neighbors — skip
         if denom == 0:
             continue
 
         predicted = user_mean + numerator / denom
-        # Clamp to the valid rating range so the UI never shows nonsense values.
+        # clamp sto [0.5, 5.0] giati mathematika mporei na vgei ektos range
         predicted = max(0.5, min(5.0, predicted))
         predictions.append((predicted, movie_id))
 
-    # Sort by predicted rating descending; take top N.
+    # sort by predicted rating, kratame ta top N
     predictions.sort(key=lambda t: t[0], reverse=True)
     top_predictions = predictions[:TOP_N]
 
-    # ── Step 6: join with movie metadata ────────────────────────────────────
+    # ── vima 6: prosthetoume titlo kai genres apo ti vasi ───────────────────
     return _attach_metadata(top_predictions), False
 
 
 def _attach_metadata(predictions: list[tuple[float, int]]) -> list[dict]:
-    """Fetch title + genres for each (predicted_rating, movieId) pair."""
+    """pairnei (predicted_rating, movieId) kai epistrefei full movie info me ena mono query"""
     if not predictions:
         return []
 
-    # Build a single query with IN clause — one round-trip instead of N.
+    # ena query me IN anti gia N queries — poly pio grigoro
     ids = [mid for _, mid in predictions]
     placeholders = ",".join("?" * len(ids))
     conn = get_db()
@@ -207,7 +193,7 @@ def _attach_metadata(predictions: list[tuple[float, int]]) -> list[dict]:
     result = []
     for pred, mid in predictions:
         if mid not in meta:
-            continue   # shouldn't happen, but guard against orphaned rating rows
+            continue   # den tha suvei, alla an yparxei rating xwris movie sto db to skip
         m = meta[mid]
         result.append({
             "movieId":         m["movieId"],
@@ -220,10 +206,11 @@ def _attach_metadata(predictions: list[tuple[float, int]]) -> list[dict]:
 
 def _global_fallback(user_map: dict[int, float]) -> list[dict]:
     """
-    when no neighbours are found, return the globally
-    highest-average-rated movies that the user hasn't rated yet, so the response
-    is never completely empty.  Requires at least 5 ratings per movie for
-    statistical reliability. but maybe we should also tell the user that this is nto  from the personalised recommender, but from the global popularity.
+    den vrikame arketa similar users — epistrefoume ta globally top-rated movies
+    san backup opote o user pairnei toulaxiston kati useful.
+    HAVING COUNT(*) >= 5 giati den theloume tainies me mia mona vathmologia na
+    dominoun tin lista (statistical reliability basically)
+    to frontend deixnei different message otan ayto kaleitai (isFallback=True)
     """
     conn = get_db()
     rows = conn.execute(
@@ -248,5 +235,5 @@ def _global_fallback(user_map: dict[int, float]) -> list[dict]:
             "predictedRating": round(row["avg_rating"], 4),
         }
         for row in rows
-        if row["movieId"] not in user_map
+        if row["movieId"] not in user_map  # min proeinai tainies pou exei hdh dei
     ][:TOP_N]

@@ -1,9 +1,9 @@
 """
-routes.py — The four API endpoints wired to an APIRouter.
+routes.py — ta tessera endpoints tou app, ola edo
 
-The router is imported and mounted in main.py with the /movielens/api prefix.
-Keeping routes separate from the app setup means you can add a second router
-(e.g. /admin) in main.py without touching this file.
+o router importaretai sto main.py me prefix /movielens/api opote den
+xreiazetai na to epanalamvanoume se kathe route. an theleis na prostheseis
+p.x. /admin endpoints apla kaneis neo router sto main.py kai den aggizetai ayto
 """
 
 from fastapi import APIRouter, HTTPException
@@ -26,14 +26,10 @@ router = APIRouter()
 def search_movies(search: str = ""):
     """
     GET /movielens/api/movies?search=<keyword>
-
-    Case-insensitive substring match on title using SQLite's LIKE operator.
-    LIKE is case-insensitive for ASCII by default in SQLite.
-    Returns all movies when search is empty.
-
-    Response: {"status": "success", "movies": [...]}
+    psaxnei me LIKE sto title, case-insensitive.
+    an to search einai keno epistrefei oles tis tainies (careful me pagination lol)
     """
-    # % wildcards on both sides = 'contains' match, not 'starts with'.
+    # ta % kai stis duo meries = "contains" match, oxi "starts with"
     pattern = f"%{search}%"
     rows = fetchall(
         "SELECT movieId, title, genres FROM movies WHERE title LIKE ?",
@@ -50,13 +46,10 @@ def search_movies(search: str = ""):
 def get_ratings(movieId: int):
     """
     GET /movielens/api/ratings/{movieId}
-
-    Returns every rating row for the given movie.
-    404 if the movieId does not exist in the movies table.
-
-    Response: {"status": "success", "ratings": [...]}
+    epistrefei ola ta ratings pou exei i tainía sti vasi.
+    404 an to movieId den yparxei katholou
     """
-    # First confirm the movie exists so we can return a meaningful 404.
+    # elegxoume prwta an yparxei i tainía, alliws to 404 einai meaningless
     movie = fetchone("SELECT movieId FROM movies WHERE movieId = ?", (movieId,))
     if movie is None:
         raise HTTPException(status_code=404, detail={"status": "error", "message": f"Movie {movieId} not found"})
@@ -78,15 +71,12 @@ def add_movie(body: NewMovie):
     """
     POST /movielens/api/movies
     Body: {"title": "...", "genres": "Action|Drama"}
-
-    Assigns a new movieId = max(movieId) + 1 so IDs never collide with
-    the existing dataset.  The genres string follows the pipe-separated
-    convention used throughout the CSV (e.g. "Action|Drama|Thriller").
-
-    Response: {"status": "success", "movieId": <new_id>}
+    prosthetei neo movie sti vasi me neo ID = MAX + 1
+    ta MovieLens IDs den einai sequential opote den kanoume auto-increment,
+    apla pairnoume to megalytero ID kai prosthetoume 1 — safe lol
     """
-    # Compute the next available ID inside the same connection to avoid a
-    # race condition (though SQLite's write lock makes this safe in practice).
+    # to kanoume mesa sto idio connection gia na min yparksei race condition
+    # (SQLite write lock to prostateei enwn alla still good practice)
     conn = get_db()
     try:
         row = conn.execute("SELECT MAX(movieId) AS max_id FROM movies").fetchone()
@@ -109,14 +99,10 @@ def get_recommendations(body: RecommendationRequest):
     """
     POST /movielens/api/recommendations
     Body: {"ratings": [{"movieId": 1, "rating": 4.5}, ...]}
-
-    Runs user-based collaborative filtering (see recommender.py).
-    The submitted ratings are used only in memory for this request — they
-    are NOT written to the database.
-
-    Response: {"status": "success", "recommendations": [...]}
+    trexei ton recommender me ta session ratings tou user.
+    ta ratings DEN grafontwi sti vasi, xrhsimopoiountai mono gia tin provlepsi
     """
-    # Validate that every submitted movieId actually exists in the DB.
+    # elegxoume an ola ta movieIds yparxoun sti vasi — an oxi 422 me lista twn missing
     submitted_ids = [r.movieId for r in body.ratings]
     placeholders = ",".join("?" * len(submitted_ids))
     found = fetchall(
@@ -131,7 +117,7 @@ def get_recommendations(body: RecommendationRequest):
             detail={"status": "error", "message": f"Unknown movieId(s): {missing}"},
         )
 
-    # Convert Pydantic objects to plain dicts for the pure-Python recommender.
+    # ta Pydantic objects ta kanome plain dicts giati o recommender den xerei Pydantic
     user_ratings = [{"movieId": r.movieId, "rating": r.rating}
                     for r in body.ratings]
 

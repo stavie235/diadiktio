@@ -1,9 +1,9 @@
 """
-main.py — FastAPI application factory, CORS setup, and Uvicorn entry point.
+main.py — edo startarei olo to app, CORS kai error handling
 
-Start the server:
+gia na trekseis ton server:
     python main.py
-        or
+        i
     uvicorn main:app --port 3000 --reload
 """
 
@@ -22,9 +22,9 @@ app = FastAPI(
 )
 
 # ── CORS ──────────────────────────────────────────────────────────────────────
-# Allowing all origins is convenient for local development and acceptable for
-# a university assignment.  In production you would restrict allow_origins to
-# the exact frontend domain (e.g. ["https://myapp.example.com"]).
+# allow_origins=["*"] lei sto browser "ok na kaneis request apo opoudipote"
+# gia production tha balaname mono to domain tou frontend mas, alla gia to ptixiako
+# den mas noiazei, it's giving "works on my machine" energy
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -33,14 +33,14 @@ app.add_middleware(
 )
 
 # ── Error handlers ────────────────────────────────────────────────────────────
-# By default FastAPI wraps all errors as {"detail": ...}.  These handlers
-# normalise every failure to {"status": "error", "message": "..."} so the
-# frontend always sees the same shape — important for the JS try/catch logic.
+# to FastAPI by default stelnei errors san {"detail": ...} alla emeis theloume
+# panta {"status": "error", "message": "..."} — etsi to JS frontend xerei
+# exactly ti na perimeinei kai den kanoume extra checks
 
 @app.exception_handler(StarletteHTTPException)
 async def http_error_handler(request: Request, exc: StarletteHTTPException) -> JSONResponse:
-    # exc.detail is already our dict when raised by routes.py; a plain string
-    # for FastAPI's own 404s (unknown paths) or 405s (wrong method).
+    # an to routes.py ekane raise me dict (dikia mas morfh), to pernoume as exei
+    # alliws (p.x. FastAPI 404 gia agnosto path) to kanome string
     if isinstance(exc.detail, dict) and "message" in exc.detail:
         content = exc.detail
     else:
@@ -50,32 +50,30 @@ async def http_error_handler(request: Request, exc: StarletteHTTPException) -> J
 
 @app.exception_handler(RequestValidationError)
 async def validation_error_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
-    # Pydantic rejects bad request bodies before our code runs.  Turn the list
-    # of Pydantic error dicts into a single readable sentence.
+    # to Pydantic piasei kalo request prin ftasei sto diko mas kwdika
+    # pairnoume to proto lathos kai to kanome ena readable minima
     first = exc.errors()[0]
-    # Drop "body" prefix from location so "body → ratings → 0 → rating" becomes
-    # "ratings → 0 → rating", which is easier to read in the UI.
-    loc   = " → ".join(str(p) for p in first["loc"] if p != "body")
-    # Pydantic prefixes model_validator errors with "Value error, " — strip it.
+    # vazei "body ->" mpros, to afairoume giati einai useless info gia ton user
+    loc   = " -> ".join(str(p) for p in first["loc"] if p != "body")
+    # to Pydantic vazei "Value error, " mpros sta dika mas errors — strip it
     raw   = first["msg"].removeprefix("Value error, ")
     msg   = f"{loc}: {raw}" if loc else raw
     return JSONResponse(status_code=422, content={"status": "error", "message": msg})
 
 
 # ── Router ────────────────────────────────────────────────────────────────────
-# All endpoints defined in routes.py are reachable under /movielens/api.
-# Adding a prefix here means routes.py never needs to repeat it.
+# ola ta endpoints tou routes.py einai proseggisima me prefix /movielens/api
+# to vazei edo oste to routes.py na mhn epianalambani to prefix se kathe route
 app.include_router(router, prefix="/movielens/api")
 
 
 @app.get("/")
 def root():
-    """Health-check / sanity endpoint — visit http://localhost:3000/ to confirm the server is up."""
+    """aplo health check — an to http://localhost:3000/ epistrefei ok, o server treksei"""
     return {"status": "ok", "message": "MovieLens API is running. See /docs for the interactive spec."}
 
 
 if __name__ == "__main__":
-    # Running `python main.py` starts Uvicorn directly.
-    # --reload is omitted here; add it manually during development if you want
-    # auto-restart on file changes: uvicorn main:app --port 3000 --reload
+    # python main.py ksekinae ton server apeftheias
+    # an theleis auto-restart otan allazeis arxeia: uvicorn main:app --port 3000 --reload
     uvicorn.run("main:app", host="0.0.0.0", port=3000)
