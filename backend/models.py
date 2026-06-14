@@ -60,3 +60,4 @@ class RecommendedMovie(BaseModel):
     title:           str
     genres:          str
     predictedRating: float
+    isFallback:      bool = False

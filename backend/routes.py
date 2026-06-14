@@ -116,17 +116,33 @@ def get_recommendations(body: RecommendationRequest):
 
     Response: {"status": "success", "recommendations": [...]}
     """
+    # Validate that every submitted movieId actually exists in the DB.
+    submitted_ids = [r.movieId for r in body.ratings]
+    placeholders = ",".join("?" * len(submitted_ids))
+    found = fetchall(
+        f"SELECT movieId FROM movies WHERE movieId IN ({placeholders})",
+        tuple(submitted_ids),
+    )
+    found_ids = {row["movieId"] for row in found}
+    missing = [mid for mid in submitted_ids if mid not in found_ids]
+    if missing:
+        raise HTTPException(
+            status_code=422,
+            detail={"status": "error", "message": f"Unknown movieId(s): {missing}"},
+        )
+
     # Convert Pydantic objects to plain dicts for the pure-Python recommender.
     user_ratings = [{"movieId": r.movieId, "rating": r.rating}
                     for r in body.ratings]
 
-    results = recommend(user_ratings)
+    results, is_fallback = recommend(user_ratings)
     recs = [
         RecommendedMovie(
             movieId=r["movieId"],
             title=r["title"],
             genres=r["genres"],
             predictedRating=r["predictedRating"],
+            isFallback=is_fallback,
         )
         for r in results
     ]

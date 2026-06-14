@@ -38,7 +38,7 @@ TOP_N = 10
 # Minimum number of movies both users must have rated together to compute a
 # meaningful Pearson correlation.  With only 1 co-rated item the formula
 # degenerates (denominator = 0 for centred ratings).
-MIN_CO_RATED = 2
+MIN_CO_RATED = 2   # raising the threshold risks finding zero neighbors at all and always falling back to global popularity. That would make the recommender look broken.
 
 
 # ── Pure maths helpers ────────────────────────────────────────────────────────
@@ -101,7 +101,7 @@ def recommend(user_ratings: list[dict]) -> list[dict]:
     # Map the active user's ratings for fast look-up.
     # {movieId: rating}
     user_map: dict[int, float] = {r["movieId"]: r["rating"] for r in user_ratings}
-    user_mean = sum(user_map.values()) / len(user_map)
+    user_mean = sum(user_map.values()) / len(user_map)   # if the denom was zero  we see in models.py aka in RecommendationRequest that min_length=1 so is safe and FastAPI rejects empty lists with a 422 error before we even get here.
 
     # ── Step 1: load all DB ratings ──────────────────────────────────────────
     conn = get_db()
@@ -139,7 +139,7 @@ def recommend(user_ratings: list[dict]) -> list[dict]:
         # Optional fallback: return the globally highest-rated movies.
         # This gives the user something useful even when their taste is unique.
         # Clearly flagged as a fallback so the examiner knows it's intentional.
-        return _global_fallback(user_map)
+        return _global_fallback(user_map), True
 
     # Sort by similarity descending; keep top K.
     similarities.sort(key=lambda t: t[0], reverse=True)
@@ -184,7 +184,7 @@ def recommend(user_ratings: list[dict]) -> list[dict]:
     top_predictions = predictions[:TOP_N]
 
     # ── Step 6: join with movie metadata ────────────────────────────────────
-    return _attach_metadata(top_predictions)
+    return _attach_metadata(top_predictions), False
 
 
 def _attach_metadata(predictions: list[tuple[float, int]]) -> list[dict]:
@@ -220,10 +220,10 @@ def _attach_metadata(predictions: list[tuple[float, int]]) -> list[dict]:
 
 def _global_fallback(user_map: dict[int, float]) -> list[dict]:
     """
-    Fallback (optional): when no neighbours are found, return the globally
+    when no neighbours are found, return the globally
     highest-average-rated movies that the user hasn't rated yet, so the response
     is never completely empty.  Requires at least 5 ratings per movie for
-    statistical reliability.
+    statistical reliability. but maybe we should also tell the user that this is nto  from the personalised recommender, but from the global popularity.
     """
     conn = get_db()
     rows = conn.execute(

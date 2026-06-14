@@ -148,7 +148,7 @@ async function searchMovies() {
 
 // ── Section 3: Rate a movie ────────────────────────────────────────────────
 
-document.getElementById("btn-rate").addEventListener("click", () => {
+document.getElementById("btn-rate").addEventListener("click", async () => {
   const idVal  = document.getElementById("rate-id").value.trim();
   const rateVal = document.getElementById("rate-val").value.trim();
   clearMsg("msg-rate");
@@ -162,6 +162,17 @@ document.getElementById("btn-rate").addEventListener("click", () => {
   }
   if (!rateVal || isNaN(rating) || rating < 0.5 || rating > 5.0) {
     setMsg("msg-rate", "Rating must be between 0.5 and 5.0.", "err");
+    return;
+  }
+
+  try {
+    const res = await fetch(`${BASE_URL}/ratings/${movieId}`);
+    if (res.status === 404) {
+      setMsg("msg-rate", `Movie ${movieId} does not exist in the database.`, "err");
+      return;
+    }
+  } catch (err) {
+    setMsg("msg-rate", `Network error: ${err.message}`, "err");
     return;
   }
 
@@ -254,7 +265,12 @@ document.getElementById("btn-recs").addEventListener("click", async () => {
       return;
     }
 
-    setMsg("msg-recs", `${recs.length} recommendation(s) returned.`, "ok");
+    const isFallback = recs.length > 0 && recs[0].isFallback;
+    const label = isFallback
+      ? `${recs.length} popular movie(s) shown — not enough overlap with other users for personalised recommendations.`
+      : `${recs.length} personalised recommendation(s) returned.`;
+    setMsg("msg-recs", label, isFallback ? "info" : "ok");
+
     recs.forEach((r) => {
       const tr = document.createElement("tr");
       tr.innerHTML = `
